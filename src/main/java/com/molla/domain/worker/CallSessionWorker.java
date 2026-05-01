@@ -7,16 +7,17 @@ import com.molla.domain.callsession.CallSessionRepository;
 import com.molla.domain.callsession.SessionEndedEvent;
 import com.molla.domain.conversationturn.ConversationTurn;
 import com.molla.domain.conversationturn.ConversationTurnRepository;
-import com.molla.domain.feedbackreport.FeedbackReportRepository;
 import com.molla.domain.feedbackreport.FeedbackReport;
+import com.molla.domain.feedbackreport.FeedbackReportRepository;
 import com.molla.domain.subscription.SubscriptionRepository;
 import com.molla.domain.usermemory.UserMemory;
 import com.molla.domain.usermemory.UserMemoryService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.context.event.EventListener;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.event.TransactionPhase;
+import org.springframework.transaction.event.TransactionalEventListener;
 
 import java.util.List;
 
@@ -35,11 +36,12 @@ public class CallSessionWorker {
     private final ObjectMapper objectMapper;
 
     /**
-     * SessionEndedEvent 수신 후 비동기로 전체 파이프라인 실행.
-     * 각 단계가 실패해도 로그만 남기고 다음 단계 계속 진행.
+     * 트랜잭션 커밋 완료 후 비동기 실행.
+     * @TransactionalEventListener(AFTER_COMMIT) — endSession() 커밋 전에 워커가 실행되어
+     * 세션 데이터를 못 읽는 문제 방지.
      */
     @Async("workerExecutor")
-    @EventListener
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     public void processAfterCall(SessionEndedEvent event) {
         String sessionId = event.getSessionId();
         String userId = event.getUserId();
@@ -70,11 +72,10 @@ public class CallSessionWorker {
 
         // ── Step 1: 리포트 생성 ──────────────────────
         String reportJson = null;
-        FeedbackReport savedReport = null;
 
         try {
             reportJson = openAiClient.generateReport(turns, session.getSessionType());
-            savedReport = saveReport(sessionId, session.getSessionType(), reportJson);
+            saveReport(sessionId, session.getSessionType(), reportJson);
             log.info("Step 1 완료 — 리포트 생성, sessionId: {}", sessionId);
         } catch (Exception e) {
             log.error("Step 1 실패 — 리포트 생성 오류, sessionId: {}, error: {}", sessionId, e.getMessage(), e);
@@ -127,7 +128,6 @@ public class CallSessionWorker {
 
     private void upsertUserMemory(String userId, String memorySummaryJson, Integer durationSeconds) throws Exception {
         JsonNode node = objectMapper.readTree(memorySummaryJson);
-
         int addedMinutes = durationSeconds != null ? (int) Math.ceil(durationSeconds / 60.0) : 0;
 
         userMemoryService.upsertMemory(

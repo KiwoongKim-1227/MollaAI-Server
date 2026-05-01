@@ -2,7 +2,6 @@ package com.molla.domain.subscription;
 
 import jakarta.persistence.*;
 import lombok.AccessLevel;
-import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 
@@ -37,12 +36,13 @@ public class Subscription {
     @Column(nullable = false, length = 20)
     private String status;
 
-    // ──────────────────────────────────────────────
-    // 정적 팩토리
-    // ──────────────────────────────────────────────
 
-    @Builder
-    public static Subscription create(String userId, String planType, int dailyLimitMinutes, LocalDateTime expiresAt) {
+    public static Subscription create(
+            String userId,
+            String planType,
+            int dailyLimitMinutes,
+            LocalDateTime expiresAt
+    ) {
         Subscription sub = new Subscription();
         sub.id = UUID.randomUUID().toString();
         sub.userId = userId;

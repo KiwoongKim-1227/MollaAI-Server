@@ -27,8 +27,10 @@ public class User {
     @Column(name = "password_hash", length = 255)
     private String passwordHash;
 
+    // boolean 필드명에서 is_ 접두사 제거
+    // Lombok이 isRegistered() getter를 자동 생성, JPA 컬럼명은 name으로 명시
     @Column(name = "is_registered", nullable = false)
-    private boolean isRegistered;
+    private boolean registered;
 
     @Column(name = "english_level", length = 20)
     private String englishLevel;
@@ -52,12 +54,11 @@ public class User {
     // 정적 팩토리
     // ──────────────────────────────────────────────
 
-    /** 전화 수신 시 최초 생성 (비회원) */
     public static User createByPhone(String phoneNumber) {
         User user = new User();
         user.id = UUID.randomUUID().toString();
         user.phoneNumber = phoneNumber;
-        user.isRegistered = false;
+        user.registered = false;
         user.status = "active";
         user.firstCallAt = LocalDateTime.now();
         return user;
@@ -67,28 +68,24 @@ public class User {
     // 비즈니스 메서드
     // ──────────────────────────────────────────────
 
-    /** 앱 회원가입 완료 */
     public void register(String username, String passwordHash) {
         this.username = username;
         this.passwordHash = passwordHash;
-        this.isRegistered = true;
+        this.registered = true;
         this.registeredAt = LocalDateTime.now();
     }
 
-    /** 내 정보 수정 */
     public void update(String username, String englishLevel) {
         if (username != null) this.username = username;
         if (englishLevel != null) this.englishLevel = englishLevel;
     }
 
-    /** 회원 탈퇴 */
     public void withdraw() {
         this.status = "withdrawn";
         this.refreshToken = null;
         this.tokenExpiresAt = null;
     }
 
-    /** Refresh Token 저장 */
     public void updateRefreshToken(String refreshToken, LocalDateTime expiresAt) {
         this.refreshToken = refreshToken;
         this.tokenExpiresAt = expiresAt;

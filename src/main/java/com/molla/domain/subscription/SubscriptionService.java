@@ -1,11 +1,11 @@
 package com.molla.domain.subscription;
 
+import com.molla.common.exception.GlobalException;
 import com.molla.common.response.ErrorCode;
 import com.molla.controller.dto.subscription.CreateSubscriptionRequest;
 import com.molla.controller.dto.subscription.SubscriptionResponse;
 import com.molla.controller.dto.subscription.SubscriptionWithRemainingResponse;
 import com.molla.domain.user.UserRepository;
-import com.molla.common.exception.GlobalException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -20,17 +20,17 @@ public class SubscriptionService {
 
     private final SubscriptionRepository subscriptionRepository;
     private final UserRepository userRepository;
-    private final DailyUsageCalculator dailyUsageCalculator; // 6단계에서 구현
+    private final DailyUsageCalculator dailyUsageCalculator;
 
     // ──────────────────────────────────────────────
     // 내 구독 조회
     // ──────────────────────────────────────────────
 
+    @Transactional  // expireSubscription() Dirty Checking 반영을 위해 필요
     public SubscriptionWithRemainingResponse getMySubscription(String userId) {
         Subscription subscription = subscriptionRepository.findActiveByUserId(userId)
                 .orElseThrow(() -> new SubscriptionException(ErrorCode.SUBSCRIPTION_NOT_FOUND));
 
-        // 만료 여부 체크 후 상태 갱신 (Lazy 만료 처리)
         if (subscription.isExpired()) {
             expireSubscription(subscription);
             throw new SubscriptionException(ErrorCode.SUBSCRIPTION_NOT_FOUND);
@@ -46,11 +46,9 @@ public class SubscriptionService {
 
     @Transactional
     public SubscriptionResponse createSubscription(String userId, CreateSubscriptionRequest request) {
-        // 유저 존재 확인
         userRepository.findById(userId)
                 .orElseThrow(() -> new GlobalException(ErrorCode.USER_NOT_FOUND));
 
-        // 이미 활성 구독이 있으면 중복 생성 불가
         if (subscriptionRepository.existsActiveByUserId(userId)) {
             throw new SubscriptionException(ErrorCode.SUBSCRIPTION_ALREADY_ACTIVE);
         }
@@ -60,13 +58,7 @@ public class SubscriptionService {
                 ? LocalDateTime.now().plusDays(request.durationDays())
                 : null;
 
-        Subscription subscription = Subscription.create(
-                userId,
-                request.planType(),
-                dailyLimit,
-                expiresAt
-        );
-
+        Subscription subscription = Subscription.create(userId, request.planType(), dailyLimit, expiresAt);
         subscriptionRepository.save(subscription);
 
         log.info("구독 생성 완료 — userId: {}, planType: {}", userId, request.planType());
@@ -74,7 +66,7 @@ public class SubscriptionService {
     }
 
     // ──────────────────────────────────────────────
-    // 통화 분 차감 (내부 API에서 호출)
+    // 통화 분 차감 검증 (내부 API에서 호출)
     // ──────────────────────────────────────────────
 
     @Transactional
@@ -88,13 +80,12 @@ public class SubscriptionService {
             throw new SubscriptionException(ErrorCode.DAILY_LIMIT_EXCEEDED);
         }
 
-        // 실제 차감은 call_sessions.duration_seconds 기반으로 계산하므로
-        // 여기서는 검증만 수행 (call_sessions 저장 시 자동 반영됨)
-        log.info("통화 분 차감 검증 완료 — userId: {}, usedMinutes: {}, remaining: {}", userId, usedMinutes, remaining);
+        log.info("통화 분 차감 검증 완료 — userId: {}, usedMinutes: {}, remaining: {}",
+                userId, usedMinutes, remaining);
     }
 
     // ──────────────────────────────────────────────
-    // 잔여 통화 가능 분 조회 (내부/외부 공용)
+    // 잔여 통화 가능 분 조회
     // ──────────────────────────────────────────────
 
     public int getRemainingMinutes(String userId) {
