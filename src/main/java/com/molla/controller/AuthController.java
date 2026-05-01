@@ -1,7 +1,7 @@
 package com.molla.controller;
 
 import com.molla.common.response.ApiResponse;
-import com.molla.controller.dto.*;
+import com.molla.controller.dto.auth.*;
 import com.molla.domain.auth.AuthService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
