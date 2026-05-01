@@ -16,7 +16,7 @@ import java.util.UUID;
 public class AuthCode {
 
     @Id
-    @Column(length = 36)
+    @Column(length = 36, columnDefinition = "CHAR(36)")
     private String id;
 
     @Column(name = "phone_number", nullable = false, length = 20)

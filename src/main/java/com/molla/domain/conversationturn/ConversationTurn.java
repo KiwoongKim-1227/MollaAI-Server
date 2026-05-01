@@ -15,10 +15,10 @@ import java.util.UUID;
 public class ConversationTurn {
 
     @Id
-    @Column(length = 36)
+    @Column(length = 36, columnDefinition = "CHAR(36)")
     private String id;
 
-    @Column(name = "session_id", nullable = false, length = 36)
+    @Column(name = "session_id", nullable = false, length = 36, columnDefinition = "CHAR(36)")
     private String sessionId;
 
     @Column(nullable = false, length = 10)

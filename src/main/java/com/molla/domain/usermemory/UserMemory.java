@@ -15,10 +15,10 @@ import java.util.UUID;
 public class UserMemory {
 
     @Id
-    @Column(length = 36)
+    @Column(length = 36, columnDefinition = "CHAR(36)")
     private String id;
 
-    @Column(name = "user_id", nullable = false, length = 36, unique = true)
+    @Column(name = "user_id", nullable = false, length = 36, unique = true, columnDefinition = "CHAR(36)")
     private String userId;
 
     @Column(columnDefinition = "TEXT")

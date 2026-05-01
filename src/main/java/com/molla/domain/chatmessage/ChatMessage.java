@@ -15,13 +15,13 @@ import java.util.UUID;
 public class ChatMessage {
 
     @Id
-    @Column(length = 36)
+    @Column(length = 36, columnDefinition = "CHAR(36)")
     private String id;
 
-    @Column(name = "user_id", nullable = false, length = 36)
+    @Column(name = "user_id", nullable = false, length = 36, columnDefinition = "CHAR(36)")
     private String userId;
 
-    @Column(name = "session_id", length = 36)
+    @Column(name = "session_id", length = 36, columnDefinition = "CHAR(36)")
     private String sessionId;           // nullable — 세션과 무관한 채팅도 가능
 
     @Column(nullable = false, length = 10)

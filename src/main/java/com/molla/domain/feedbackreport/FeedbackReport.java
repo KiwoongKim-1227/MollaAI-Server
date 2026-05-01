@@ -15,10 +15,10 @@ import java.util.UUID;
 public class FeedbackReport {
 
     @Id
-    @Column(length = 36)
+    @Column(length = 36, columnDefinition = "CHAR(36)")
     private String id;
 
-    @Column(name = "session_id", nullable = false, length = 36, unique = true)
+    @Column(name = "session_id", nullable = false, length = 36, unique = true, columnDefinition = "CHAR(36)")
     private String sessionId;
 
     @Column(name = "report_type", nullable = false, length = 20)

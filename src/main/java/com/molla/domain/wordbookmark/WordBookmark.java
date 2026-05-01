@@ -15,13 +15,13 @@ import java.util.UUID;
 public class WordBookmark {
 
     @Id
-    @Column(length = 36)
+    @Column(length = 36, columnDefinition = "CHAR(36)")
     private String id;
 
-    @Column(name = "user_id", nullable = false, length = 36)
+    @Column(name = "user_id", nullable = false, length = 36, columnDefinition = "CHAR(36)")
     private String userId;
 
-    @Column(name = "session_id", length = 36)
+    @Column(name = "session_id", length = 36, columnDefinition = "CHAR(36)")
     private String sessionId;           // nullable — 어느 통화에서 저장했는지
 
     @Column(nullable = false, length = 100)
