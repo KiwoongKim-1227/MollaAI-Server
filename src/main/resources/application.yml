@@ -1,0 +1,43 @@
+spring:
+  datasource:
+    url: jdbc:mysql://molla-mysql:3306/molla_db?useSSL=false&serverTimezone=Asia/Seoul&characterEncoding=UTF-8
+    username: molla
+    password: molla1234
+    driver-class-name: com.mysql.cj.jdbc.Driver
+
+  jpa:
+    hibernate:
+      ddl-auto: none
+    show-sql: false
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.MySQLDialect
+        format_sql: true
+
+server:
+  port: 8080
+
+jwt:
+  secret: local-dev-secret-key-must-be-at-least-256-bits-long-change-in-prod
+  access-token-expiration-ms: 3600000
+  refresh-token-expiration-ms: 2592000000
+
+naver:
+  sens:
+    access-key: placeholder
+    secret-key: placeholder
+    service-id: placeholder
+    from-number: placeholder
+
+openai:
+  api-key: placeholder
+  model: gpt-4o
+  embedding-model: text-embedding-3-small
+
+springdoc:
+  api-docs:
+    path: /api-docs
+  swagger-ui:
+    path: /swagger-ui/index.html
+  default-consumes-media-type: application/json
+  default-produces-media-type: application/json
