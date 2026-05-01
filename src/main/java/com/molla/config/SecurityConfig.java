@@ -36,6 +36,8 @@ public class SecurityConfig {
             "/api/v1/auth/refresh",
             // 내부 API — AI 오케스트레이션 서버 전용
             "/api/v1/internal/**",
+            // 개발용
+            "/api/v1/dev/**",
             // Swagger
             "/swagger-ui/**",
             "/swagger-ui.html",
