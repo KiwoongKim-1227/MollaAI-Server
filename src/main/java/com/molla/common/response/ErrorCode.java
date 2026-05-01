@@ -55,6 +55,7 @@ public enum ErrorCode {
     // 단어장
     // ──────────────────────────────────────────────
     BOOKMARK_NOT_FOUND(HttpStatus.NOT_FOUND, "BOOKMARK_NOT_FOUND", "단어장 항목을 찾을 수 없습니다."),
+    UNAUTHORIZED_BOOKMARK_ACCESS(HttpStatus.FORBIDDEN, "UNAUTHORIZED_BOOKMARK_ACCESS", "본인의 단어장만 삭제할 수 있습니다."),
 
     // ──────────────────────────────────────────────
     // 공통
