@@ -30,6 +30,8 @@ dependencies {
     implementation 'org.springframework.boot:spring-boot-starter-security'
     implementation 'org.springframework.boot:spring-boot-starter-validation'
 
+    implementation 'commons-codec:commons-codec:1.17.1'
+
     // MySQL
     runtimeOnly 'com.mysql:mysql-connector-j'
 
