@@ -41,6 +41,9 @@ dependencies {
     // Swagger (버전 명시 필요)
     implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:2.8.5'
 
+    // HTTP Client (네이버 SENS WebClient 호출용)
+    implementation 'org.springframework.boot:spring-boot-starter-webflux'
+
     // Lombok
     compileOnly 'org.projectlombok:lombok'
     annotationProcessor 'org.projectlombok:lombok'
