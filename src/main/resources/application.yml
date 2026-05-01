@@ -25,14 +25,14 @@ jwt:
 
 naver:
   sens:
-    access-key: ${NAVER_SENS_ACCESS_KEY:your-access-key}
-    secret-key: ${NAVER_SENS_SECRET_KEY:your-secret-key}
-    service-id: ${NAVER_SENS_SERVICE_ID:your-service-id}
-    from-number: ${NAVER_SENS_FROM_NUMBER:01000000000}
+    access-key: ${NAVER_SENS_ACCESS_KEY}
+    secret-key: ${NAVER_SENS_SECRET_KEY}
+    service-id: ${NAVER_SENS_SERVICE_ID}
+    from-number: ${NAVER_SENS_FROM_NUMBER}
     base-url: https://sens.apigw.ntruss.com
 
 openai:
-  api-key: ${OPENAI_API_KEY:your-openai-api-key}
+  api-key: ${OPENAI_API_KEY}
   base-url: https://api.openai.com/v1
   model: gpt-4o
   embedding-model: text-embedding-3-small
