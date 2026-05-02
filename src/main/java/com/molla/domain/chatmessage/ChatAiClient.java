@@ -3,7 +3,6 @@ package com.molla.domain.chatmessage;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.molla.common.response.ErrorCode;
-import com.molla.domain.feedbackreport.FeedbackReport;
 import com.molla.domain.feedbackreport.FeedbackReportRepository;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -11,10 +10,9 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import org.springframework.web.reactive.function.client.WebClient;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-
-//OpenAiClient를 직접 쓰면 워커 전용 로직과 섞이므로, 채팅 전용 AI 호출 클라이언트를 분리
 
 @Slf4j
 @Component
@@ -37,15 +35,6 @@ public class ChatAiClient {
         this.model = model;
     }
 
-    /**
-     * 유저 메시지에 대한 AI 응답 생성.
-     * 세션 리포트가 있으면 컨텍스트로 포함해서 더 정확한 피드백 제공.
-     *
-     * @param sessionId  연결된 세션 ID (nullable)
-     * @param userMessage 유저 메시지
-     * @param history    이전 대화 히스토리 (최근 10개)
-     * @return AI 응답 텍스트
-     */
     public String generateReply(String sessionId, String userMessage, List<ChatMessage> history) {
         String reportContext = buildReportContext(sessionId);
 
@@ -54,6 +43,7 @@ public class ChatAiClient {
                 영어 예시나 교정은 영어로 작성하세요.
                 """ + reportContext;
 
+        // history는 현재 메시지 미포함 상태 — buildMessages에서 마지막에 userMessage append
         List<Map<String, String>> messages = buildMessages(systemPrompt, history, userMessage);
 
         try {
@@ -72,8 +62,24 @@ public class ChatAiClient {
                     .block();
 
             JsonNode root = objectMapper.readTree(response);
-            return root.path("choices").get(0).path("message").path("content").asText();
 
+            // null-safe 파싱
+            JsonNode choices = root.path("choices");
+            if (!choices.isArray() || choices.isEmpty()) {
+                log.error("ChatAI 응답에 choices 없음. 응답: {}", response);
+                throw new ChatMessageException(ErrorCode.INTERNAL_SERVER_ERROR);
+            }
+
+            JsonNode content = choices.get(0).path("message").path("content");
+            if (content.isMissingNode() || content.isNull()) {
+                log.error("ChatAI 응답에 content 없음. 응답: {}", response);
+                throw new ChatMessageException(ErrorCode.INTERNAL_SERVER_ERROR);
+            }
+
+            return content.asText();
+
+        } catch (ChatMessageException e) {
+            throw e;
         } catch (Exception e) {
             log.error("AI 채팅 응답 생성 실패: {}", e.getMessage(), e);
             throw new ChatMessageException(ErrorCode.INTERNAL_SERVER_ERROR);
@@ -102,18 +108,18 @@ public class ChatAiClient {
             List<ChatMessage> history,
             String userMessage
     ) {
-        // system 메시지
-        List<Map<String, String>> messages = new java.util.ArrayList<>();
+        List<Map<String, String>> messages = new ArrayList<>();
         messages.add(Map.of("role", "system", "content", systemPrompt));
 
-        // 이전 대화 히스토리 (최근 10개만 포함 — 토큰 절약)
+        // 이전 대화 히스토리 (최근 10개 — 토큰 절약)
+        // history는 현재 메시지 미포함 상태로 전달됨
         int start = Math.max(0, history.size() - 10);
         for (ChatMessage msg : history.subList(start, history.size())) {
             String role = "user".equals(msg.getSender()) ? "user" : "assistant";
             messages.add(Map.of("role", role, "content", msg.getContent()));
         }
 
-        // 현재 유저 메시지
+        // 현재 유저 메시지 append (중복 없음)
         messages.add(Map.of("role", "user", "content", userMessage));
 
         return messages;

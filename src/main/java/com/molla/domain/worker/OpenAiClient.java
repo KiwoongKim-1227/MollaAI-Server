@@ -4,7 +4,6 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.molla.domain.conversationturn.ConversationTurn;
 import com.molla.domain.usermemory.UserMemory;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
@@ -33,15 +32,6 @@ public class OpenAiClient {
         this.model = model;
     }
 
-    // ──────────────────────────────────────────────
-    // 리포트 생성
-    // ──────────────────────────────────────────────
-
-    /**
-     * 통화 발화 목록을 OpenAI에 전달해서 리포트 JSON 생성.
-     *
-     * @return 리포트 JSON 문자열 (파싱 전 raw)
-     */
     public String generateReport(List<ConversationTurn> turns, String sessionType) {
         String transcript = buildTranscript(turns);
 
@@ -65,19 +55,9 @@ public class OpenAiClient {
                 """;
 
         String userPrompt = "세션 타입: " + sessionType + "\n\n대화록:\n" + transcript;
-
         return callChatApi(systemPrompt, userPrompt);
     }
 
-    // ──────────────────────────────────────────────
-    // 메모리 요약 재생성
-    // ──────────────────────────────────────────────
-
-    /**
-     * 기존 메모리 + 이번 리포트 기반으로 누적 메모리 요약 재생성.
-     *
-     * @return 메모리 JSON 문자열
-     */
     public String generateMemorySummary(UserMemory existingMemory, String reportJson) {
         String existingMemoryJson = existingMemory != null
                 ? buildExistingMemoryJson(existingMemory)
@@ -103,15 +83,6 @@ public class OpenAiClient {
         return callChatApi(systemPrompt, userPrompt);
     }
 
-    // ──────────────────────────────────────────────
-    // 임베딩 생성
-    // ──────────────────────────────────────────────
-
-    /**
-     * 텍스트 임베딩 벡터 생성.
-     *
-     * @return float 배열
-     */
     public List<Float> createEmbedding(String text, String embeddingModel) {
         Map<String, Object> body = Map.of(
                 "model", embeddingModel,
@@ -127,9 +98,15 @@ public class OpenAiClient {
                     .block();
 
             JsonNode root = objectMapper.readTree(response);
-            JsonNode embeddingArray = root.path("data").get(0).path("embedding");
+            JsonNode dataArray = root.path("data");
 
+            if (!dataArray.isArray() || dataArray.isEmpty()) {
+                throw new RuntimeException("임베딩 응답 data 배열이 비어있음");
+            }
+
+            JsonNode embeddingArray = dataArray.get(0).path("embedding");
             return objectMapper.readerForListOf(Float.class).readValue(embeddingArray);
+
         } catch (Exception e) {
             throw new RuntimeException("임베딩 생성 실패: " + e.getMessage(), e);
         }
@@ -159,8 +136,24 @@ public class OpenAiClient {
                     .block();
 
             JsonNode root = objectMapper.readTree(response);
-            return root.path("choices").get(0).path("message").path("content").asText();
+
+            // null-safe 파싱 — choices 배열 존재 여부 및 길이 확인
+            JsonNode choices = root.path("choices");
+            if (!choices.isArray() || choices.isEmpty()) {
+                log.error("OpenAI 응답에 choices 없음. 응답: {}", response);
+                throw new RuntimeException("OpenAI 응답 파싱 실패: choices 없음");
+            }
+
+            JsonNode content = choices.get(0).path("message").path("content");
+            if (content.isMissingNode() || content.isNull()) {
+                log.error("OpenAI 응답에 content 없음. 응답: {}", response);
+                throw new RuntimeException("OpenAI 응답 파싱 실패: content 없음");
+            }
+
+            return content.asText();
+
         } catch (Exception e) {
+            log.error("OpenAI API 호출 실패: {}", e.getMessage(), e);
             throw new RuntimeException("OpenAI API 호출 실패: " + e.getMessage(), e);
         }
     }
