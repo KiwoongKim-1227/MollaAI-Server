@@ -22,10 +22,6 @@ public class ChatMessageService {
     private final CallSessionRepository callSessionRepository;
     private final ChatAiClient chatAiClient;
 
-    // ──────────────────────────────────────────────
-    // 메시지 목록 조회
-    // ──────────────────────────────────────────────
-
     public List<ChatMessageResponse> getMessages(String sessionId, String userId) {
         callSessionRepository.findByIdAndUserId(sessionId, userId)
                 .orElseThrow(() -> new GlobalException(ErrorCode.SESSION_NOT_FOUND));
@@ -37,24 +33,20 @@ public class ChatMessageService {
                 .toList();
     }
 
-    // ──────────────────────────────────────────────
-    // 메시지 전송 + AI 응답 생성
-    // 유저 메시지는 먼저 커밋 후 AI 호출 — AI 실패 시 유저 메시지가 롤백되는 것 방지
-    // ──────────────────────────────────────────────
-
     public ChatExchangeResponse sendMessage(String sessionId, String userId, SendMessageRequest request) {
         callSessionRepository.findByIdAndUserId(sessionId, userId)
                 .orElseThrow(() -> new GlobalException(ErrorCode.SESSION_NOT_FOUND));
 
-        // 1. 유저 메시지 먼저 커밋 (별도 트랜잭션)
+        // 1. 유저 메시지 먼저 저장 (별도 트랜잭션 — AI 실패해도 유저 메시지 보존)
         ChatMessageResponse userMsg = saveUserMessage(sessionId, userId, request.content());
 
-        // 2. 히스토리 조회 (방금 저장한 유저 메시지 포함)
+        // 2. 히스토리 조회 — 방금 저장한 유저 메시지 포함된 상태
+        //    buildMessages()에서 userMessage를 다시 append하지 않으므로 중복 없음
         List<ChatMessage> history = chatMessageRepository
                 .findBySessionIdAndUserIdOrderByCreatedAtAsc(sessionId, userId);
 
-        // 3. AI 응답 생성 (트랜잭션 외부 — 실패해도 유저 메시지는 보존)
-        String aiReply = chatAiClient.generateReply(sessionId, request.content(), history);
+        // 3. AI 응답 생성
+        String aiReply = chatAiClient.generateReply(sessionId, history);
 
         // 4. AI 응답 저장
         ChatMessage aiMessage = ChatMessage.create(userId, sessionId, "ai", aiReply);
@@ -64,10 +56,6 @@ public class ChatMessageService {
 
         return ChatExchangeResponse.of(userMsg, ChatMessageResponse.from(aiMessage));
     }
-
-    // ──────────────────────────────────────────────
-    // 내부 유틸
-    // ──────────────────────────────────────────────
 
     @Transactional
     public ChatMessageResponse saveUserMessage(String sessionId, String userId, String content) {

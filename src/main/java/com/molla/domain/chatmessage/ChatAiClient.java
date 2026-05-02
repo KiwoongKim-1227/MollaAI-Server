@@ -35,7 +35,11 @@ public class ChatAiClient {
         this.model = model;
     }
 
-    public String generateReply(String sessionId, String userMessage, List<ChatMessage> history) {
+    /**
+     * history에 이미 최신 유저 메시지가 포함된 상태로 전달됨.
+     * buildMessages()에서 별도로 userMessage를 append하지 않음 — 중복 방지.
+     */
+    public String generateReply(String sessionId, List<ChatMessage> history) {
         String reportContext = buildReportContext(sessionId);
 
         String systemPrompt = """
@@ -43,8 +47,7 @@ public class ChatAiClient {
                 영어 예시나 교정은 영어로 작성하세요.
                 """ + reportContext;
 
-        // history는 현재 메시지 미포함 상태 — buildMessages에서 마지막에 userMessage append
-        List<Map<String, String>> messages = buildMessages(systemPrompt, history, userMessage);
+        List<Map<String, String>> messages = buildMessages(systemPrompt, history);
 
         try {
             Map<String, Object> body = Map.of(
@@ -63,7 +66,6 @@ public class ChatAiClient {
 
             JsonNode root = objectMapper.readTree(response);
 
-            // null-safe 파싱
             JsonNode choices = root.path("choices");
             if (!choices.isArray() || choices.isEmpty()) {
                 log.error("ChatAI 응답에 choices 없음. 응답: {}", response);
@@ -105,22 +107,17 @@ public class ChatAiClient {
 
     private List<Map<String, String>> buildMessages(
             String systemPrompt,
-            List<ChatMessage> history,
-            String userMessage
+            List<ChatMessage> history
     ) {
         List<Map<String, String>> messages = new ArrayList<>();
         messages.add(Map.of("role", "system", "content", systemPrompt));
 
-        // 이전 대화 히스토리 (최근 10개 — 토큰 절약)
-        // history는 현재 메시지 미포함 상태로 전달됨
+        // history에 이미 최신 유저 메시지 포함 — 그대로 사용, 별도 append 없음
         int start = Math.max(0, history.size() - 10);
         for (ChatMessage msg : history.subList(start, history.size())) {
             String role = "user".equals(msg.getSender()) ? "user" : "assistant";
             messages.add(Map.of("role", role, "content", msg.getContent()));
         }
-
-        // 현재 유저 메시지 append (중복 없음)
-        messages.add(Map.of("role", "user", "content", userMessage));
 
         return messages;
     }
