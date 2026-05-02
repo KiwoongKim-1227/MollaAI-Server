@@ -1,8 +1,15 @@
 package com.molla.controller;
 
 import com.molla.common.response.ApiResponse;
-import com.molla.controller.dto.auth.*;
+import com.molla.controller.dto.auth.AccessTokenResponse;
+import com.molla.controller.dto.auth.RefreshTokenRequest;
+import com.molla.controller.dto.auth.RegisterRequest;
+import com.molla.controller.dto.auth.SendCodeRequest;
+import com.molla.controller.dto.auth.TokenResponse;
+import com.molla.controller.dto.auth.VerifyCodeRequest;
+import com.molla.controller.dto.user.UserResponse;
 import com.molla.domain.auth.AuthService;
+import com.molla.domain.user.UserService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
@@ -12,6 +19,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
@@ -19,10 +27,11 @@ import org.springframework.web.bind.annotation.RestController;
 @Tag(name = "Auth", description = "인증 API — SMS 인증 및 JWT 발급")
 @RestController
 @RequiredArgsConstructor
-@SecurityRequirements // 인증 불필요 — Swagger 전역 Security override
+@SecurityRequirements
 public class AuthController {
 
     private final AuthService authService;
+    private final UserService userService;
 
     @Operation(
             summary = "인증번호 SMS 발송",
@@ -49,9 +58,8 @@ public class AuthController {
             summary = "인증번호 확인 + JWT 발급",
             description = """
                     인증번호를 확인하고 JWT를 발급합니다.
-                    - 인증 성공 시 Access Token(1시간), Refresh Token(30일) 반환
-                    - 최초 인증 유저: `isNewUser: true` → 앱 가입 플로우 진행
-                    - 기존 유저: `isNewUser: false` → 바로 로그인 처리
+                    - 신규 유저: `isNewUser: true` → 프론트에서 이름 입력창 표시 → `/api/v1/auth/register` 호출
+                    - 기존 유저: `isNewUser: false` → 바로 로그인 완료
                     """
     )
     @ApiResponses({
@@ -71,8 +79,40 @@ public class AuthController {
     }
 
     @Operation(
+            summary = "회원가입 — 이름 등록",
+            description = """
+                    신규 유저가 이름을 등록하고 가입을 완료합니다.
+                    - `verify-code`에서 `isNewUser: true` 받은 경우에만 호출
+                    - Access Token 필요 (verify-code에서 발급받은 토큰)
+                    - 이미 가입된 유저가 재요청하면 409 반환
+                    """
+    )
+    @ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "200", description = "가입 성공",
+                    content = @Content(schema = @Schema(implementation = UserResponse.class))),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "409", description = "이미 가입된 유저",
+                    content = @Content(schema = @Schema(implementation = ApiResponse.class))),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "401", description = "인증 필요",
+                    content = @Content(schema = @Schema(implementation = ApiResponse.class)))
+    })
+    @io.swagger.v3.oas.annotations.security.SecurityRequirements(
+            value = @io.swagger.v3.oas.annotations.security.SecurityRequirement(name = "BearerAuth")
+    )
+    @PostMapping("/api/v1/auth/register")
+    public ResponseEntity<ApiResponse<UserResponse>> register(
+            @RequestBody @Valid RegisterRequest request
+    ) {
+        String userId = (String) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
+        UserResponse response = userService.register(userId, request);
+        return ResponseEntity.ok(ApiResponse.success("회원가입이 완료되었습니다.", response));
+    }
+
+    @Operation(
             summary = "Access Token 재발급",
-            description = "만료된 Access Token을 Refresh Token으로 재발급합니다. Refresh Token은 DB 저장값과 대조하며, 30일 후 만료됩니다."
+            description = "만료된 Access Token을 Refresh Token으로 재발급합니다."
     )
     @ApiResponses({
             @io.swagger.v3.oas.annotations.responses.ApiResponse(

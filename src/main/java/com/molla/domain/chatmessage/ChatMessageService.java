@@ -6,6 +6,8 @@ import com.molla.controller.dto.chatmessage.ChatExchangeResponse;
 import com.molla.controller.dto.chatmessage.ChatMessageResponse;
 import com.molla.controller.dto.chatmessage.SendMessageRequest;
 import com.molla.domain.callsession.CallSessionRepository;
+import com.molla.domain.user.User;
+import com.molla.domain.user.UserRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -20,6 +22,7 @@ public class ChatMessageService {
 
     private final ChatMessageRepository chatMessageRepository;
     private final CallSessionRepository callSessionRepository;
+    private final UserRepository userRepository;
     private final ChatAiClient chatAiClient;
 
     public List<ChatMessageResponse> getMessages(String sessionId, String userId) {
@@ -37,16 +40,20 @@ public class ChatMessageService {
         callSessionRepository.findByIdAndUserId(sessionId, userId)
                 .orElseThrow(() -> new GlobalException(ErrorCode.SESSION_NOT_FOUND));
 
-        // 1. 유저 메시지 먼저 저장 (별도 트랜잭션 — AI 실패해도 유저 메시지 보존)
+        // username 조회 — AI 프롬프트에 전달
+        String username = userRepository.findById(userId)
+                .map(User::getUsername)
+                .orElse(null);
+
+        // 1. 유저 메시지 먼저 저장 (별도 트랜잭션)
         ChatMessageResponse userMsg = saveUserMessage(sessionId, userId, request.content());
 
-        // 2. 히스토리 조회 — 방금 저장한 유저 메시지 포함된 상태
-        //    buildMessages()에서 userMessage를 다시 append하지 않으므로 중복 없음
+        // 2. 히스토리 조회 (저장된 유저 메시지 포함)
         List<ChatMessage> history = chatMessageRepository
                 .findBySessionIdAndUserIdOrderByCreatedAtAsc(sessionId, userId);
 
-        // 3. AI 응답 생성
-        String aiReply = chatAiClient.generateReply(sessionId, history);
+        // 3. AI 응답 생성 — username 전달
+        String aiReply = chatAiClient.generateReply(sessionId, history, username);
 
         // 4. AI 응답 저장
         ChatMessage aiMessage = ChatMessage.create(userId, sessionId, "ai", aiReply);

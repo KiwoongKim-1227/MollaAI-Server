@@ -36,16 +36,21 @@ public class ChatAiClient {
     }
 
     /**
-     * history에 이미 최신 유저 메시지가 포함된 상태로 전달됨.
-     * buildMessages()에서 별도로 userMessage를 append하지 않음 — 중복 방지.
+     * username을 시스템 프롬프트에 포함해서 AI가 이름으로 호칭.
+     * history에 이미 최신 유저 메시지 포함 — 별도 append 없음.
      */
-    public String generateReply(String sessionId, List<ChatMessage> history) {
+    public String generateReply(String sessionId, List<ChatMessage> history, String username) {
         String reportContext = buildReportContext(sessionId);
 
-        String systemPrompt = """
-                당신은 친절한 영어 학습 코치입니다. 학습자의 질문에 한국어로 답변하되,
-                영어 예시나 교정은 영어로 작성하세요.
-                """ + reportContext;
+        // username이 있으면 AI가 이름으로 호칭
+        String nameContext = (username != null && !username.isBlank())
+                ? "학습자의 이름은 " + username + "입니다. 대화 중 자연스럽게 이름을 불러주세요.\n"
+                : "";
+
+        String systemPrompt = "당신은 친절한 영어 학습 코치입니다. 학습자의 질문에 한국어로 답변하되, "
+                + "영어 예시나 교정은 영어로 작성하세요.\n"
+                + nameContext
+                + reportContext;
 
         List<Map<String, String>> messages = buildMessages(systemPrompt, history);
 
@@ -88,10 +93,6 @@ public class ChatAiClient {
         }
     }
 
-    // ──────────────────────────────────────────────
-    // 내부 유틸
-    // ──────────────────────────────────────────────
-
     private String buildReportContext(String sessionId) {
         if (sessionId == null) return "";
 
@@ -112,7 +113,6 @@ public class ChatAiClient {
         List<Map<String, String>> messages = new ArrayList<>();
         messages.add(Map.of("role", "system", "content", systemPrompt));
 
-        // history에 이미 최신 유저 메시지 포함 — 그대로 사용, 별도 append 없음
         int start = Math.max(0, history.size() - 10);
         for (ChatMessage msg : history.subList(start, history.size())) {
             String role = "user".equals(msg.getSender()) ? "user" : "assistant";

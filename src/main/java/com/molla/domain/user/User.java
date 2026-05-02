@@ -25,7 +25,7 @@ public class User {
     private String username;
 
     @Column(name = "password_hash", length = 255)
-    private String passwordHash;
+    private String passwordHash;            // 소셜로그인 대비 유지 (nullable)
 
     @Column(name = "is_registered", nullable = false)
     private boolean registered;
@@ -66,9 +66,9 @@ public class User {
     // 비즈니스 메서드
     // ──────────────────────────────────────────────
 
-    public void register(String username, String passwordHash) {
+    /** 이름 입력 후 가입 완료 — password 없음 */
+    public void register(String username) {
         this.username = username;
-        this.passwordHash = passwordHash;
         this.registered = true;
         this.registeredAt = LocalDateTime.now();
     }
@@ -78,7 +78,6 @@ public class User {
         if (englishLevel != null) this.englishLevel = englishLevel;
     }
 
-    /** 레벨 테스트 통화 후 워커가 자동 업데이트 */
     public void updateEnglishLevel(String englishLevel) {
         this.englishLevel = englishLevel;
     }
