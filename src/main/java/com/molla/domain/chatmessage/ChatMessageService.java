@@ -5,7 +5,6 @@ import com.molla.common.response.ErrorCode;
 import com.molla.controller.dto.chatmessage.ChatExchangeResponse;
 import com.molla.controller.dto.chatmessage.ChatMessageResponse;
 import com.molla.controller.dto.chatmessage.SendMessageRequest;
-import com.molla.domain.callsession.CallSessionRepository;
 import com.molla.domain.user.User;
 import com.molla.domain.user.UserRepository;
 import com.molla.domain.usermemory.UserMemory;
@@ -24,71 +23,67 @@ import java.util.List;
 public class ChatMessageService {
 
     private final ChatMessageRepository chatMessageRepository;
-    private final CallSessionRepository callSessionRepository;
     private final UserRepository userRepository;
     private final UserMemoryService userMemoryService;
     private final ChatAiClient chatAiClient;
 
-    public List<ChatMessageResponse> getMessages(String sessionId, String userId) {
-        callSessionRepository.findByIdAndUserId(sessionId, userId)
-                .orElseThrow(() -> new GlobalException(ErrorCode.SESSION_NOT_FOUND));
+    // ──────────────────────────────────────────────
+    // 전체 채팅 목록 조회
+    // ──────────────────────────────────────────────
 
-        return chatMessageRepository
-                .findBySessionIdAndUserIdOrderByCreatedAtAsc(sessionId, userId)
+    public List<ChatMessageResponse> getAllMessages(String userId) {
+        return chatMessageRepository.findByUserIdOrderByCreatedAtAsc(userId)
                 .stream()
                 .map(ChatMessageResponse::from)
                 .toList();
     }
 
-    public ChatExchangeResponse sendMessage(String sessionId, String userId, SendMessageRequest request) {
-        callSessionRepository.findByIdAndUserId(sessionId, userId)
-                .orElseThrow(() -> new GlobalException(ErrorCode.SESSION_NOT_FOUND));
+    // ──────────────────────────────────────────────
+    // 메시지 전송 + AI 응답 생성
+    // ──────────────────────────────────────────────
 
-        // username, user_memories 조회 — AI 프롬프트에 전달
+    public ChatExchangeResponse sendMessage(String userId, SendMessageRequest request) {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new GlobalException(ErrorCode.USER_NOT_FOUND));
 
         UserMemory memory = userMemoryService.getMemory(userId);
 
-        // 1. 유저 메시지 먼저 저장 (별도 트랜잭션)
-        ChatMessageResponse userMsg = saveUserMessage(sessionId, userId, request.content());
+        // 1. 유저 메시지 저장 (별도 트랜잭션)
+        ChatMessageResponse userMsg = saveUserMessage(userId, request.content());
 
-        // 2. 히스토리 조회 (저장된 유저 메시지 포함)
+        // 2. 히스토리 조회 (방금 저장한 메시지 포함)
         List<ChatMessage> history = chatMessageRepository
-                .findBySessionIdAndUserIdOrderByCreatedAtAsc(sessionId, userId);
+                .findByUserIdOrderByCreatedAtAsc(userId);
 
-        // 3. AI 응답 생성 — username + memory 전달
-        String aiReply = chatAiClient.generateReply(sessionId, history, user.getUsername(), memory);
+        // 3. AI 응답 생성
+        String aiReply = chatAiClient.generateReply(history, user.getUsername(), memory);
 
         // 4. AI 응답 저장
-        ChatMessage aiMessage = ChatMessage.create(userId, sessionId, "ai", aiReply);
+        ChatMessage aiMessage = ChatMessage.create(userId, null, "ai", aiReply);
         chatMessageRepository.save(aiMessage);
 
-        // 5. 채팅 내용 기반 메모리 비동기 업데이트
+        // 5. 메모리 비동기 업데이트 (3턴마다)
         updateMemoryAsync(userId, history, aiReply);
 
-        log.info("채팅 메시지 처리 완료 — sessionId: {}, userId: {}", sessionId, userId);
-
+        log.info("채팅 완료 — userId: {}", userId);
         return ChatExchangeResponse.of(userMsg, ChatMessageResponse.from(aiMessage));
     }
 
+    // ──────────────────────────────────────────────
+    // 내부 유틸
+    // ──────────────────────────────────────────────
+
     @Transactional
-    public ChatMessageResponse saveUserMessage(String sessionId, String userId, String content) {
-        ChatMessage userMessage = ChatMessage.create(userId, sessionId, "user", content);
+    public ChatMessageResponse saveUserMessage(String userId, String content) {
+        ChatMessage userMessage = ChatMessage.create(userId, null, "user", content);
         chatMessageRepository.save(userMessage);
         return ChatMessageResponse.from(userMessage);
     }
-
-    // ──────────────────────────────────────────────
-    // 채팅 후 메모리 비동기 업데이트
-    // 채팅 응답 지연 없이 백그라운드에서 처리
-    // ──────────────────────────────────────────────
 
     @Async("workerExecutor")
     public void updateMemoryAsync(String userId, List<ChatMessage> history, String aiReply) {
         try {
             chatAiClient.extractAndUpdateMemory(userId, history, aiReply, userMemoryService);
-            log.info("채팅 메모리 업데이트 완료 — userId: {}", userId);
         } catch (Exception e) {
             log.error("채팅 메모리 업데이트 실패 — userId: {}, error: {}", userId, e.getMessage(), e);
         }
