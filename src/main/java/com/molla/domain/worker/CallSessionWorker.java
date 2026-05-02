@@ -10,12 +10,14 @@ import com.molla.domain.conversationturn.ConversationTurnRepository;
 import com.molla.domain.feedbackreport.FeedbackReport;
 import com.molla.domain.feedbackreport.FeedbackReportRepository;
 import com.molla.domain.subscription.SubscriptionRepository;
+import com.molla.domain.user.UserRepository;
 import com.molla.domain.usermemory.UserMemory;
 import com.molla.domain.usermemory.UserMemoryService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.event.TransactionPhase;
 import org.springframework.transaction.event.TransactionalEventListener;
 
@@ -31,15 +33,11 @@ public class CallSessionWorker {
     private final FeedbackReportRepository feedbackReportRepository;
     private final SubscriptionRepository subscriptionRepository;
     private final UserMemoryService userMemoryService;
+    private final UserRepository userRepository;          // ← 추가
     private final OpenAiClient openAiClient;
     private final QdrantClient qdrantClient;
     private final ObjectMapper objectMapper;
 
-    /**
-     * 트랜잭션 커밋 완료 후 비동기 실행.
-     * @TransactionalEventListener(AFTER_COMMIT) — endSession() 커밋 전에 워커가 실행되어
-     * 세션 데이터를 못 읽는 문제 방지.
-     */
     @Async("workerExecutor")
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     public void processAfterCall(SessionEndedEvent event) {
@@ -49,13 +47,11 @@ public class CallSessionWorker {
 
         log.info("워커 시작 — sessionId: {}, userId: {}, isLevelTest: {}", sessionId, userId, isLevelTest);
 
-        // practice 타입 — 구독 없으면 워커 중단
         if (!isLevelTest && !subscriptionRepository.existsActiveByUserId(userId)) {
             log.warn("구독 없음 — 리포트 생성 스킵, sessionId: {}", sessionId);
             return;
         }
 
-        // 발화 목록 조회
         List<ConversationTurn> turns = conversationTurnRepository
                 .findBySessionIdOrderBySequenceOrderAsc(sessionId);
 
@@ -72,11 +68,17 @@ public class CallSessionWorker {
 
         // ── Step 1: 리포트 생성 ──────────────────────
         String reportJson = null;
+        FeedbackReport savedReport = null;
 
         try {
             reportJson = openAiClient.generateReport(turns, session.getSessionType());
-            saveReport(sessionId, session.getSessionType(), reportJson);
+            savedReport = saveReport(sessionId, session.getSessionType(), reportJson);
             log.info("Step 1 완료 — 리포트 생성, sessionId: {}", sessionId);
+
+            // level_test 통화 완료 시 english_level 자동 업데이트
+            if (isLevelTest && savedReport.getLevelResult() != null) {
+                updateUserEnglishLevel(userId, savedReport.getLevelResult());
+            }
         } catch (Exception e) {
             log.error("Step 1 실패 — 리포트 생성 오류, sessionId: {}, error: {}", sessionId, e.getMessage(), e);
         }
@@ -107,6 +109,14 @@ public class CallSessionWorker {
     // ──────────────────────────────────────────────
     // 내부 유틸
     // ──────────────────────────────────────────────
+
+    @Transactional
+    public void updateUserEnglishLevel(String userId, String levelResult) {
+        userRepository.findById(userId).ifPresent(user -> {
+            user.updateEnglishLevel(levelResult);
+            log.info("english_level 업데이트 — userId: {}, level: {}", userId, levelResult);
+        });
+    }
 
     private FeedbackReport saveReport(String sessionId, String sessionType, String reportJson) throws Exception {
         JsonNode node = objectMapper.readTree(reportJson);

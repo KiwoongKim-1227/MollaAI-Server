@@ -27,8 +27,6 @@ public class User {
     @Column(name = "password_hash", length = 255)
     private String passwordHash;
 
-    // boolean 필드명에서 is_ 접두사 제거
-    // Lombok이 isRegistered() getter를 자동 생성, JPA 컬럼명은 name으로 명시
     @Column(name = "is_registered", nullable = false)
     private boolean registered;
 
@@ -78,6 +76,11 @@ public class User {
     public void update(String username, String englishLevel) {
         if (username != null) this.username = username;
         if (englishLevel != null) this.englishLevel = englishLevel;
+    }
+
+    /** 레벨 테스트 통화 후 워커가 자동 업데이트 */
+    public void updateEnglishLevel(String englishLevel) {
+        this.englishLevel = englishLevel;
     }
 
     public void withdraw() {
